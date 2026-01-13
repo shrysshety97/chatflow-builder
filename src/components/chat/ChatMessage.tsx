@@ -2,6 +2,7 @@ import React from 'react';
 import { Message } from '@/types';
 import { cn } from '@/lib/utils';
 import { Bot, User, Loader2 } from 'lucide-react';
+import { FilePreview } from './FilePreview';
 
 interface ChatMessageProps {
   message: Message;
@@ -41,9 +42,27 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isStreaming }
             : "bg-chat-assistant text-chat-assistant-foreground rounded-tl-md"
         )}
       >
-        <p className="text-sm whitespace-pre-wrap leading-relaxed">
-          {message.content || (isStreaming ? '...' : '')}
-        </p>
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {message.attachments.map(attachment => (
+              <FilePreview
+                key={attachment.id}
+                attachment={attachment}
+              />
+            ))}
+          </div>
+        )}
+        
+        {message.content && (
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+            {message.content}
+          </p>
+        )}
+        
+        {!message.content && isStreaming && (
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">...</p>
+        )}
+        
         {!isStreaming && (
           <p className={cn(
             "text-[10px] mt-1.5",

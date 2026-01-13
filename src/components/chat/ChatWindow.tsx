@@ -6,6 +6,7 @@ import { useChat } from '@/hooks/useChat';
 import { MessageSquare, Settings, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { FileAttachment } from '@/types';
 
 interface ChatWindowProps {
   onOpenSettings: () => void;
@@ -33,14 +34,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenSettings }) => {
     scrollToBottom();
   }, [messages, streamingContent]);
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, attachments?: FileAttachment[]) => {
     if (!currentProject) return;
 
-    // Add user message to database
+    // Add user message to database with attachments
     const userMessage = await addMessage({
       role: 'user',
       content,
       projectId: currentProject.id,
+      attachments,
     });
 
     if (!userMessage) {
@@ -68,14 +70,28 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenSettings }) => {
     let fullContent = '';
 
     try {
-      // Build messages array for AI context
-      const chatHistory = messages.map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
+      // Build messages array for AI context (include attachment info in content)
+      const chatHistory = messages.map(m => {
+        let messageContent = m.content;
+        if (m.attachments && m.attachments.length > 0) {
+          const attachmentInfo = m.attachments.map(a => `[Attached: ${a.name}]`).join(' ');
+          messageContent = attachmentInfo + (messageContent ? '\n' + messageContent : '');
+        }
+        return {
+          role: m.role as 'user' | 'assistant',
+          content: messageContent,
+        };
+      });
+
+      // Add attachment info to current message
+      let currentContent = content;
+      if (attachments && attachments.length > 0) {
+        const attachmentInfo = attachments.map(a => `[Attached: ${a.name}]`).join(' ');
+        currentContent = attachmentInfo + (content ? '\n' + content : '');
+      }
 
       await streamChat({
-        messages: [...chatHistory, { role: 'user', content }],
+        messages: [...chatHistory, { role: 'user', content: currentContent }],
         onDelta: (chunk) => {
           fullContent += chunk;
           setStreamingContent(fullContent);

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Project, Message } from '@/types';
+import { Project, Message, FileAttachment } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
@@ -87,6 +87,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
         role: m.role as 'user' | 'assistant',
         content: m.content,
         projectId: m.project_id,
+        attachments: (m.attachments as unknown as FileAttachment[] | null) || undefined,
         createdAt: new Date(m.created_at),
       }));
 
@@ -234,7 +235,8 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
           user_id: user.id,
           role: message.role,
           content: message.content,
-        })
+          attachments: (message.attachments || []) as unknown as Record<string, unknown>[],
+        } as never)
         .select()
         .single();
 
@@ -245,6 +247,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
         role: data.role as 'user' | 'assistant',
         content: data.content,
         projectId: data.project_id,
+        attachments: (data.attachments as unknown as FileAttachment[] | null) || undefined,
         createdAt: new Date(data.created_at),
       };
 
