@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { useProjects } from '@/contexts/ProjectContext';
+import { useChat } from '@/hooks/useChat';
 import { MessageSquare, Settings, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -11,9 +12,18 @@ interface ChatWindowProps {
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenSettings }) => {
-  const { currentProject, messages, addMessage, clearMessages } = useProjects();
+  const { currentProject, messages, addMessage, updateMessage, clearMessages } = useProjects();
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { streamChat, isStreaming } = useChat({
+    systemPrompt: currentProject?.systemPrompt,
+    onError: (error) => {
+      toast.error(error.message || 'Failed to get AI response');
+    },
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -21,43 +31,73 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenSettings }) => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   const handleSendMessage = async (content: string) => {
     if (!currentProject) return;
 
-    // Add user message
-    addMessage({
+    // Add user message to database
+    const userMessage = await addMessage({
       role: 'user',
       content,
       projectId: currentProject.id,
     });
 
+    if (!userMessage) {
+      toast.error('Failed to send message');
+      return;
+    }
+
     setIsLoading(true);
+    setStreamingContent('');
 
-    // Simulate AI response (replace with actual API call)
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Mock AI response
-    const responses = [
-      "I understand your question. Let me help you with that.",
-      "That's an interesting point. Based on my analysis...",
-      "I'd be happy to assist you with this. Here's what I think...",
-      "Great question! Here's my response based on my training...",
-    ];
-    
-    addMessage({
+    // Create placeholder for assistant message
+    const assistantMessage = await addMessage({
       role: 'assistant',
-      content: responses[Math.floor(Math.random() * responses.length)] + 
-        " This is a demo response. Connect an LLM API for real responses.",
+      content: '',
       projectId: currentProject.id,
     });
 
-    setIsLoading(false);
+    if (!assistantMessage) {
+      setIsLoading(false);
+      return;
+    }
+
+    setStreamingMessageId(assistantMessage.id);
+
+    let fullContent = '';
+
+    try {
+      // Build messages array for AI context
+      const chatHistory = messages.map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      await streamChat({
+        messages: [...chatHistory, { role: 'user', content }],
+        onDelta: (chunk) => {
+          fullContent += chunk;
+          setStreamingContent(fullContent);
+          updateMessage(assistantMessage.id, fullContent);
+        },
+        onDone: () => {
+          setStreamingContent('');
+          setStreamingMessageId(null);
+          setIsLoading(false);
+        },
+      });
+    } catch (error) {
+      // Update the message with error indicator
+      updateMessage(assistantMessage.id, 'Sorry, I encountered an error. Please try again.');
+      setStreamingContent('');
+      setStreamingMessageId(null);
+      setIsLoading(false);
+    }
   };
 
-  const handleClearChat = () => {
-    clearMessages();
+  const handleClearChat = async () => {
+    await clearMessages();
     toast.success('Chat cleared');
   };
 
@@ -97,7 +137,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenSettings }) => {
             variant="ghost"
             size="icon"
             onClick={handleClearChat}
-            disabled={messages.length === 0}
+            disabled={messages.length === 0 || isLoading}
             title="Clear chat"
           >
             <Trash2 className="h-4 w-4" />
@@ -125,14 +165,18 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ onOpenSettings }) => {
           </div>
         ) : (
           messages.map(message => (
-            <ChatMessage key={message.id} message={message} />
+            <ChatMessage 
+              key={message.id} 
+              message={message}
+              isStreaming={message.id === streamingMessageId}
+            />
           ))
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading || isStreaming} />
     </div>
   );
 };

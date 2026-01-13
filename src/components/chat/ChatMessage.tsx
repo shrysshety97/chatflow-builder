@@ -1,13 +1,14 @@
 import React from 'react';
 import { Message } from '@/types';
 import { cn } from '@/lib/utils';
-import { Bot, User } from 'lucide-react';
+import { Bot, User, Loader2 } from 'lucide-react';
 
 interface ChatMessageProps {
   message: Message;
+  isStreaming?: boolean;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isStreaming }) => {
   const isUser = message.role === 'user';
 
   return (
@@ -25,6 +26,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
       >
         {isUser ? (
           <User className="h-4 w-4 text-primary-foreground" />
+        ) : isStreaming ? (
+          <Loader2 className="h-4 w-4 text-foreground animate-spin" />
         ) : (
           <Bot className="h-4 w-4 text-foreground" />
         )}
@@ -39,17 +42,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         )}
       >
         <p className="text-sm whitespace-pre-wrap leading-relaxed">
-          {message.content}
+          {message.content || (isStreaming ? '...' : '')}
         </p>
-        <p className={cn(
-          "text-[10px] mt-1.5",
-          isUser ? "text-primary-foreground/60" : "text-muted-foreground"
-        )}>
-          {new Date(message.createdAt).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          })}
-        </p>
+        {!isStreaming && (
+          <p className={cn(
+            "text-[10px] mt-1.5",
+            isUser ? "text-primary-foreground/60" : "text-muted-foreground"
+          )}>
+            {new Date(message.createdAt).toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })}
+          </p>
+        )}
       </div>
     </div>
   );
