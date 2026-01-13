@@ -16,11 +16,20 @@ export interface Project {
   updatedAt: Date;
 }
 
+export interface FileAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  size: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   projectId: string;
+  attachments?: FileAttachment[];
   createdAt: Date;
 }
 
