@@ -1,16 +1,11 @@
 import React from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import AuthPage from './AuthPage';
+import { useAuth } from '@/features/auth';
+import { AuthPage } from '@/features/auth';
 import Dashboard from './Dashboard';
 
 const Index: React.FC = () => {
   const { isAuthenticated } = useAuth();
-
-  if (!isAuthenticated) {
-    return <AuthPage />;
-  }
-
-  return <Dashboard />;
+  return isAuthenticated ? <Dashboard /> : <AuthPage />;
 };
 
 export default Index;
