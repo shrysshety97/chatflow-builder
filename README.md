@@ -155,18 +155,99 @@ callAIGateway(apiKey, messages) → Response
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+
-- npm or bun
 
-### Development
+Before running the application, ensure you have the following installed:
+
+- **Node.js** 18.x or higher ([Download](https://nodejs.org/))
+- **npm** 9.x+ or **bun** 1.x+ (comes with Node.js)
+- **Git** (for cloning the repository)
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <YOUR_GIT_URL>
+   cd <YOUR_PROJECT_NAME>
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   # or using bun
+   bun install
+   ```
+
+3. **Environment Variables**
+   
+   The following environment variables are automatically configured when using Lovable Cloud:
+   - `VITE_SUPABASE_URL` - Supabase project URL
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` - Supabase anon/public key
+   - `VITE_SUPABASE_PROJECT_ID` - Supabase project ID
+
+   For local development outside Lovable, create a `.env` file:
+   ```env
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+   VITE_SUPABASE_PROJECT_ID=your_project_id
+   ```
+
+### Running the Application
+
+#### Development Mode
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server
+# Start the development server with hot reload
 npm run dev
+# or
+bun dev
 ```
+
+The application will be available at `http://localhost:5173`
+
+#### Production Build
+
+```bash
+# Create optimized production build
+npm run build
+
+# Preview the production build locally
+npm run preview
+```
+
+#### Linting
+
+```bash
+# Run ESLint to check for code issues
+npm run lint
+```
+
+### Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server with HMR |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint |
+
+---
+
+## 🔧 Configuration
+
+### Vite Configuration
+
+The project uses Vite as the build tool. Configuration is in `vite.config.ts`.
+
+### Tailwind CSS
+
+Tailwind configuration is in `tailwind.config.ts`. Custom design tokens are defined in `src/index.css`.
+
+### TypeScript
+
+TypeScript configuration files:
+- `tsconfig.json` - Base config
+- `tsconfig.app.json` - App-specific config
+- `tsconfig.node.json` - Node.js config
 
 ---
 
