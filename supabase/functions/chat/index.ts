@@ -1,83 +1,118 @@
+// Chat edge function - handles AI chat completions
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { handleCors, streamResponse, errorResponse } from "../_shared/cors.ts";
+import { validateChatRequest, sanitizeMessages } from "../_shared/validation.ts";
+import { AI_CONFIG, ERROR_MESSAGES, HTTP_STATUS } from "../_shared/config.ts";
+import { createLogger } from "../_shared/logger.ts";
+import type { ChatRequest } from "../_shared/types.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const log = createLogger('chat');
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+// Controller: handles incoming request routing
+async function handleRequest(req: Request): Promise<Response> {
+  // Handle CORS preflight
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
+
+  if (req.method !== 'POST') {
+    return errorResponse('Method not allowed', HTTP_STATUS.BAD_REQUEST);
   }
 
   try {
-    const { messages, systemPrompt } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { 
-            role: "system", 
-            content: systemPrompt || "You are a helpful AI assistant. Be concise, accurate, and friendly in your responses." 
-          },
-          ...messages,
-        ],
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), 
-          {
-            status: 429,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to continue." }), 
-          {
-            status: 402,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      return new Response(
-        JSON.stringify({ error: "AI service temporarily unavailable" }), 
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-    });
+    const body = await req.json();
+    return await processChat(body);
   } catch (error) {
-    console.error("Chat function error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), 
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    log.error('Request parsing failed', { error: error instanceof Error ? error.message : error });
+    return errorResponse('Invalid JSON body', HTTP_STATUS.BAD_REQUEST);
   }
-});
+}
+
+// Service: processes chat completions
+async function processChat(body: unknown): Promise<Response> {
+  // Validate request
+  const validation = validateChatRequest(body);
+  if (!validation.isValid) {
+    log.warn('Validation failed', { error: validation.error });
+    return errorResponse(validation.error || 'Invalid request', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const request = body as ChatRequest;
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  
+  if (!apiKey) {
+    log.error('API key not configured');
+    return errorResponse(ERROR_MESSAGES.API_KEY_MISSING, HTTP_STATUS.INTERNAL_ERROR);
+  }
+
+  // Prepare messages
+  const messages = [
+    { 
+      role: 'system' as const, 
+      content: request.systemPrompt || AI_CONFIG.DEFAULT_SYSTEM_PROMPT 
+    },
+    ...sanitizeMessages(request.messages),
+  ];
+
+  log.info('Processing chat request', { 
+    messageCount: messages.length, 
+    model: request.model || AI_CONFIG.DEFAULT_MODEL 
+  });
+
+  // Call AI gateway
+  try {
+    const response = await callAIGateway(apiKey, messages, request.model);
+    return response;
+  } catch (error) {
+    log.error('AI gateway call failed', { error: error instanceof Error ? error.message : error });
+    return errorResponse(ERROR_MESSAGES.SERVICE_UNAVAILABLE, HTTP_STATUS.INTERNAL_ERROR);
+  }
+}
+
+// Gateway: calls external AI service
+async function callAIGateway(
+  apiKey: string, 
+  messages: Array<{ role: string; content: string }>,
+  model?: string
+): Promise<Response> {
+  const response = await fetch(AI_CONFIG.GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: model || AI_CONFIG.DEFAULT_MODEL,
+      messages,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    return handleGatewayError(response);
+  }
+
+  log.info('AI gateway response received', { status: response.status });
+  return streamResponse(response.body);
+}
+
+// Error handler for gateway responses
+async function handleGatewayError(response: Response): Promise<Response> {
+  const status = response.status;
+  
+  if (status === HTTP_STATUS.RATE_LIMITED) {
+    log.warn('Rate limit exceeded');
+    return errorResponse(ERROR_MESSAGES.RATE_LIMIT, HTTP_STATUS.RATE_LIMITED);
+  }
+  
+  if (status === HTTP_STATUS.PAYMENT_REQUIRED) {
+    log.warn('Payment required');
+    return errorResponse(ERROR_MESSAGES.PAYMENT_REQUIRED, HTTP_STATUS.PAYMENT_REQUIRED);
+  }
+
+  const errorText = await response.text();
+  log.error('AI gateway error', { status, error: errorText });
+  return errorResponse(ERROR_MESSAGES.SERVICE_UNAVAILABLE, HTTP_STATUS.INTERNAL_ERROR);
+}
+
+// Main entry point
+serve(handleRequest);
